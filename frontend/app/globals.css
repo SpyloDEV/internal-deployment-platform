@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 33% 98%;
+  --foreground: 222 47% 11%;
+  --muted: 214 32% 91%;
+  --muted-foreground: 215 16% 44%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --border: 214 32% 88%;
+  --primary: 189 95% 34%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 42 95% 56%;
+  --accent-foreground: 222 47% 11%;
+  --destructive: 0 84% 60%;
+}
+
+.dark {
+  --background: 222 47% 7%;
+  --foreground: 210 40% 98%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 215 20% 70%;
+  --card: 222 47% 10%;
+  --card-foreground: 210 40% 98%;
+  --border: 217 33% 22%;
+  --primary: 186 100% 38%;
+  --primary-foreground: 222 47% 8%;
+  --accent: 42 95% 58%;
+  --accent-foreground: 222 47% 11%;
+  --destructive: 0 72% 51%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+.dashboard-grid {
+  background-image:
+    linear-gradient(to right, rgba(15, 23, 42, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
