@@ -262,3 +262,140 @@ Seed data includes a demo platform owner, organization, team, services, environm
 - Dockerized fullstack development with PostgreSQL and Redis.
 - Deployment-domain modeling: services, environments, logs, health, policies, rollbacks, incidents.
 - Frontend dashboard composition with Next.js, TypeScript, Tailwind, charts, tables, states, and responsive layout.
+
+<!-- lead-level-notes:start -->
+
+## Lead-Level Architecture Notes
+
+### Problem
+
+Teams need deployment history, environment variables, live logs, health checks, rollbacks, and audit trails in one place. Without a deployment control plane, production changes are hard to review and harder to recover from.
+
+### Solution
+
+This platform models organizations, teams, services, environments, deployments, logs, rollbacks, env vars, health checks, policies, incidents, metrics, and audit logs. Workers simulate deployment steps while WebSockets stream build and deploy logs to the dashboard.
+
+### Architecture Overview
+
+This is a portfolio/simulation project, but it is structured around the same boundaries a production team would care about:
+
+- Frontend/client: Next.js frontend.
+- Backend API: FastAPI routes stay thin and delegate business rules to services.
+- Database: PostgreSQL is the source of truth for relational state, ownership, and auditability.
+- Redis: Used where the project needs queues, Pub/Sub, cache-ready paths, or rate-limit-ready primitives.
+- Background jobs: Deployments are intentionally modeled as asynchronous jobs with status transitions, logs, cancellation points, and rollback records.
+- Integrations: Mock providers are kept behind service boundaries so real vendors can be added without changing API contracts.
+- Runtime flow: Requests validate identity and tenant access first, then call services that persist state, emit logs, and enqueue async work when needed.
+
+Key components:
+
+- Next.js deployment dashboard
+- FastAPI backend API
+- PostgreSQL for services, environments, deployments, logs, incidents, and audit state
+- Redis broker for deployment workers
+- WebSockets for live deployment logs
+- Policy service for production guardrails
+
+### Mermaid Diagrams
+
+#### System Overview
+
+```mermaid
+flowchart LR
+  Frontend[Next.js dashboard] --> API[FastAPI backend]
+  SDK[SDKs or integrations] --> API
+  API --> DB[(PostgreSQL)]
+  API --> Redis[(Redis)]
+  API --> Logs[Audit and execution logs]
+  Redis --> Async[Workers or realtime consumers]
+  Async --> DB
+  API --> Mock[Mock external integrations]
+```
+
+#### Deployment Flow
+
+```mermaid
+sequenceDiagram
+  participant UI as Dashboard
+  participant API
+  participant Policy
+  participant DB as PostgreSQL
+  participant Redis
+  participant Worker
+  participant WS as Log stream
+  UI->>API: Trigger deployment
+  API->>Policy: Check production and service guardrails
+  API->>DB: Create queued deployment
+  API->>Redis: Queue deployment job
+  Worker->>DB: Append build and deploy logs
+  Worker->>WS: Stream live log lines
+  Worker->>DB: Store health check and final status
+```
+
+### Lead-Level Engineering Decisions
+
+- FastAPI keeps the API surface explicit, typed, and easy to document through OpenAPI.
+- PostgreSQL is used for durable relational state because the core domain depends on ownership, filtering, constraints, and audit history.
+- Service and repository layers keep route handlers small and make permission checks, workflows, and business rules easier to test.
+- Redis is used for lightweight async coordination, Pub/Sub, cache-ready access patterns, or rate limiting depending on the product shape.
+- Pydantic schemas define clear input/output contracts and avoid leaking ORM details into HTTP responses.
+- Docker Compose keeps the local runtime close to a real deployment without hiding the moving parts.
+- The project would need Kafka or another event stream when message volume, replay, ordering, or cross-service consumers outgrow Redis queues or Pub/Sub.
+- Kubernetes would make sense once multiple API/worker replicas, autoscaling, secrets management, and rollout strategy become operational concerns.
+- Object storage becomes necessary when user-uploaded files, exports, or artifacts should not live on local disk.
+
+### Production Considerations
+
+- Rate limiting should be applied to authentication, public ingestion, webhook, and API-key protected endpoints.
+- Important POST endpoints should support idempotency keys when clients may retry after timeouts.
+- Workers should record retry attempts, terminal failures, and enough context for support/debugging.
+- Structured logging should include request IDs, actor IDs, tenant/workspace IDs, and resource IDs where safe.
+- Health checks should distinguish process health from dependency readiness for database, Redis, and workers.
+- Error responses should stay consistent and avoid leaking internal exception details.
+- Pagination and filtering should be mandatory for list endpoints that can grow with customer usage.
+- Validation should happen at the API boundary and again inside domain services for sensitive state transitions.
+- Audit logs should be append-only from the application's point of view and easy to filter by actor/action/resource.
+
+### Security Considerations
+
+- JWT secrets and database credentials belong in environment variables or a secret manager, never in source code.
+- Passwords should be hashed with a slow password hashing algorithm and never logged.
+- API keys should be shown only once, stored hashed, scoped to the smallest useful surface, and revocable.
+- RBAC or workspace membership checks should happen before returning or mutating tenant-owned resources.
+- Tenant/workspace isolation should be tested with explicit cross-tenant access attempts.
+- Input validation should cover request bodies, path parameters, uploaded files, and integration payloads.
+- Safe defaults matter: deny by default, keep production actions stricter, and prefer explicit allow lists.
+- The most important security boundary in this project is role-based deployment permissions and secret masking for env vars.
+
+### Observability
+
+- Request logs should capture method, path, status, latency, and correlation ID.
+- Domain logs should capture state transitions such as queued, processing, completed, failed, revoked, or retried.
+- Audit logs explain who changed what and when.
+- Metrics/analytics endpoints provide a product-facing view of usage, failure rates, and operational health.
+- `/health` gives a basic load balancer check; production would add dependency checks and build/version metadata.
+- Error tracking can be mocked locally, but production should send exceptions to Sentry or a similar system.
+- Realtime log streams, where present, are for operator feedback and should not replace persisted logs.
+
+### Scaling Strategy
+
+- MVP: one API instance, one PostgreSQL database, one Redis instance, and one worker process is enough to validate the product shape.
+- Next step: run multiple API replicas, separate worker queues by workload, and add indexes for tenant ID, status, timestamps, and foreign keys.
+- Caching: cache read-heavy reference data carefully and keep invalidation tied to writes or versioned configs.
+- Queues: keep short jobs on Redis; move to Kafka, Redpanda, or a managed queue when replay, ordering, or long retention are needed.
+- Database: use connection pooling, query plans, and read replicas before introducing unnecessary data stores.
+- Horizontal scaling should preserve tenant isolation, idempotency, and clear ownership of background jobs.
+- This system would most likely need a stronger event backbone when many services and high-frequency deployments across environments.
+
+### Future Improvements
+
+- Add Kubernetes deployment adapters
+- Add build artifact storage
+- Add signed approvals for production releases
+- Kubernetes manifests or Helm charts once runtime topology matters.
+- OpenTelemetry traces across API, workers, database calls, and external integrations.
+- Sentry or another error tracker for production exception triage.
+- Prometheus and Grafana dashboards for latency, queue depth, throughput, and failure rates.
+- More contract and integration tests around permission boundaries and failure paths.
+
+<!-- lead-level-notes:end -->
